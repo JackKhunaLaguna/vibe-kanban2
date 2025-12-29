@@ -433,6 +433,61 @@ pub struct ShareTaskResponse {
     pub shared_task_id: Uuid,
 }
 
+/// Request body for generating AI-powered task suggestions
+#[derive(Debug, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateTaskRequest {
+    /// Natural language task description from the user
+    pub user_input: String,
+    /// The project identifier for context
+    pub project_id: Uuid,
+}
+
+/// Response for the task generation endpoint
+#[derive(Debug, Serialize, Deserialize, TS)]
+pub struct GenerateTaskResponse {
+    /// Generated task title
+    pub title: String,
+    /// Generated prompt/description for the task
+    pub prompt: String,
+}
+
+pub async fn generate_task(
+    State(_deployment): State<DeploymentImpl>,
+    Json(payload): Json<GenerateTaskRequest>,
+) -> Result<ResponseJson<ApiResponse<GenerateTaskResponse>>, ApiError> {
+    // Validate required fields
+    if payload.user_input.trim().is_empty() {
+        return Err(ApiError::BadRequest(
+            "userInput is required and cannot be empty".to_string(),
+        ));
+    }
+
+    tracing::debug!(
+        "Generating task for project {} with input: {}",
+        payload.project_id,
+        payload.user_input
+    );
+
+    // TODO: Integrate with AI service for actual task generation
+    // For now, return mock response with placeholder data
+    let response = GenerateTaskResponse {
+        title: format!("Task: {}", truncate_string(&payload.user_input, 50)),
+        prompt: payload.user_input.clone(),
+    };
+
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+/// Truncates a string to the specified max length, adding ellipsis if truncated
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
 pub async fn share_task(
     Extension(task): Extension<Task>,
     State(deployment): State<DeploymentImpl>,
@@ -477,6 +532,12 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/create-and-start", post(create_task_and_start))
         .nest("/{task_id}", task_id_router);
 
-    // mount under /projects/:project_id/tasks
-    Router::new().nest("/tasks", inner)
+    // Top-level tasks routes (mounted at /api/tasks)
+    let top_level_tasks = Router::new().route("/generate", post(generate_task));
+
+    Router::new()
+        // mount under /projects/:project_id/tasks (nested via projects router)
+        .nest("/tasks", inner)
+        // mount top-level /tasks routes directly
+        .merge(Router::new().nest("/tasks", top_level_tasks))
 }
