@@ -37,6 +37,21 @@ use crate::{
     routes::task_attempts::WorkspaceRepoInput,
 };
 
+// Task generation request/response types
+#[derive(Debug, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateTasksRequest {
+    pub user_input: String,
+    pub project_id: String,
+    pub system_prompt: String,
+    pub user_prompt: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct GenerateTasksResponse {
+    pub content: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskQuery {
     pub project_id: Uuid,
@@ -460,6 +475,134 @@ pub async fn share_task(
     })))
 }
 
+/// Generate tasks using AI based on user input and project context.
+///
+/// This endpoint receives a prompt and context from the frontend,
+/// processes it, and returns generated task suggestions.
+///
+/// Note: This is a stub implementation. In production, this would
+/// integrate with Claude API or another LLM service.
+pub async fn generate_tasks(
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<GenerateTasksRequest>,
+) -> Result<ResponseJson<ApiResponse<GenerateTasksResponse>>, ApiError> {
+    // Validate input
+    if payload.user_input.trim().is_empty() {
+        tracing::warn!("[TaskGeneration] Empty user input received");
+        return Err(ApiError::BadRequest(
+            "User input cannot be empty".to_string(),
+        ));
+    }
+
+    if payload.project_id.is_empty() {
+        tracing::warn!("[TaskGeneration] Missing project ID");
+        return Err(ApiError::BadRequest("Project ID is required".to_string()));
+    }
+
+    // Parse project_id to validate it's a valid UUID
+    let project_uuid = match Uuid::parse_str(&payload.project_id) {
+        Ok(id) => id,
+        Err(_) => {
+            tracing::warn!(
+                "[TaskGeneration] Invalid project ID format: {}",
+                payload.project_id
+            );
+            return Err(ApiError::BadRequest(
+                "Invalid project ID format".to_string(),
+            ));
+        }
+    };
+
+    // Verify project exists
+    let project = Project::find_by_id(&deployment.db().pool, project_uuid)
+        .await?
+        .ok_or_else(|| {
+            tracing::warn!(
+                "[TaskGeneration] Project not found: {}",
+                payload.project_id
+            );
+            ApiError::BadRequest("Project not found".to_string())
+        })?;
+
+    tracing::info!(
+        "[TaskGeneration] Generating tasks for project '{}' ({})",
+        project.name,
+        project.id
+    );
+    tracing::debug!(
+        "[TaskGeneration] Request - user_input_length: {}, system_prompt_length: {}, user_prompt_length: {}",
+        payload.user_input.len(),
+        payload.system_prompt.len(),
+        payload.user_prompt.len()
+    );
+
+    // TODO: Integrate with Claude API or other LLM service
+    // For now, return a mock response that demonstrates the expected format
+    //
+    // In production, this would:
+    // 1. Send the system_prompt and user_prompt to Claude API
+    // 2. Parse the response
+    // 3. Return the generated tasks
+    //
+    // Example integration point:
+    // let claude_response = claude_client
+    //     .messages()
+    //     .create(CreateMessageParams {
+    //         model: "claude-sonnet-4-20250514".to_string(),
+    //         max_tokens: 4096,
+    //         system: payload.system_prompt,
+    //         messages: vec![Message::user(payload.user_prompt)],
+    //     })
+    //     .await?;
+
+    let mock_response = serde_json::json!({
+        "tasks": [
+            {
+                "title": format!("Implement: {}", truncate_string(&payload.user_input, 50)),
+                "description": format!(
+                    "Based on the request: {}\n\nThis task was generated as a placeholder. Configure Claude API integration for actual task generation.",
+                    payload.user_input
+                ),
+                "status": "todo"
+            }
+        ],
+        "reasoning": "This is a placeholder response. Configure Claude API integration for intelligent task generation based on your project context."
+    });
+
+    let content = serde_json::to_string(&mock_response).map_err(|e| {
+        tracing::error!("[TaskGeneration] Failed to serialize response: {}", e);
+        ApiError::BadRequest("Failed to generate response".to_string())
+    })?;
+
+    tracing::info!(
+        "[TaskGeneration] Successfully generated tasks for project {}",
+        project.id
+    );
+
+    deployment
+        .track_if_analytics_allowed(
+            "tasks_generated",
+            serde_json::json!({
+                "project_id": project.id.to_string(),
+                "user_input_length": payload.user_input.len(),
+            }),
+        )
+        .await;
+
+    Ok(ResponseJson(ApiResponse::success(GenerateTasksResponse {
+        content,
+    })))
+}
+
+/// Helper function to truncate strings for display
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
 pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let task_actions_router = Router::new()
         .route("/", put(update_task))
@@ -475,6 +618,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/", get(get_tasks).post(create_task))
         .route("/stream/ws", get(stream_tasks_ws))
         .route("/create-and-start", post(create_task_and_start))
+        .route("/generate", post(generate_tasks))
         .nest("/{task_id}", task_id_router);
 
     // mount under /projects/:project_id/tasks

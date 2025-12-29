@@ -465,6 +465,24 @@ export const tasksApi = {
     });
     return handleApiResponse<Task | null>(response);
   },
+
+  /**
+   * Generate task suggestions using AI based on user input and project context.
+   * @param params - The generation request parameters
+   * @returns The generated content as a JSON string
+   */
+  generate: async (params: {
+    userInput: string;
+    projectId: string;
+    systemPrompt: string;
+    userPrompt: string;
+  }): Promise<{ content: string }> => {
+    const response = await makeRequest('/api/tasks/generate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    return handleApiResponse<{ content: string }>(response);
+  },
 };
 
 // Sessions API
