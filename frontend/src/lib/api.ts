@@ -1301,3 +1301,38 @@ export const queueApi = {
     return handleApiResponse<QueueStatus>(response);
   },
 };
+
+// Review API - for analyzing tasks in review
+import type {
+  CompleteReview,
+  FixResult,
+  Fix,
+} from '@/types/review';
+
+export const reviewApi = {
+  /**
+   * Analyze tasks that are in review status
+   * @param taskIds Array of task IDs to analyze
+   * @returns Complete review with summary, comments, and suggested fixes
+   */
+  analyzeTasks: async (taskIds: string[]): Promise<CompleteReview> => {
+    const response = await makeRequest('/api/review/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ task_ids: taskIds }),
+    });
+    return handleApiResponse<CompleteReview>(response);
+  },
+
+  /**
+   * Apply suggested fixes from a review
+   * @param fixes Array of fixes to apply
+   * @returns Results for each fix attempt
+   */
+  applyFixes: async (fixes: Fix[]): Promise<FixResult[]> => {
+    const response = await makeRequest('/api/review/apply-fixes', {
+      method: 'POST',
+      body: JSON.stringify({ fixes }),
+    });
+    return handleApiResponse<FixResult[]>(response);
+  },
+};
