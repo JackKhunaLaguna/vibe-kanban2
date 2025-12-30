@@ -27,6 +27,8 @@ use services::services::{
 use thiserror::Error;
 use utils::response::ApiResponse;
 
+use crate::routes::anthropic::AnthropicError;
+
 #[derive(Debug, Error, ts_rs::TS)]
 #[ts(type = "string")]
 pub enum ApiError {
@@ -76,6 +78,8 @@ pub enum ApiError {
     Conflict(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error(transparent)]
+    Anthropic(#[from] AnthropicError),
 }
 
 impl From<&'static str> for ApiError {
@@ -177,6 +181,16 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BadRequest"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "ConflictError"),
             ApiError::Forbidden(_) => (StatusCode::FORBIDDEN, "ForbiddenError"),
+            ApiError::Anthropic(err) => match err {
+                AnthropicError::MissingApiKey => {
+                    (StatusCode::SERVICE_UNAVAILABLE, "AnthropicConfigError")
+                }
+                AnthropicError::ApiError { status, .. } => (
+                    StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_GATEWAY),
+                    "AnthropicApiError",
+                ),
+                _ => (StatusCode::BAD_GATEWAY, "AnthropicError"),
+            },
         };
 
         let error_message = match &self {
@@ -253,6 +267,20 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(msg) => msg.clone(),
             ApiError::Conflict(msg) => msg.clone(),
             ApiError::Forbidden(msg) => msg.clone(),
+            ApiError::Anthropic(err) => match err {
+                AnthropicError::MissingApiKey => {
+                    "AI task generation is not configured. Please set the ANTHROPIC_API_KEY environment variable.".to_string()
+                }
+                AnthropicError::ApiError { message, .. } => {
+                    format!("AI service error: {}", message)
+                }
+                AnthropicError::ParseError(msg) => {
+                    format!("Failed to parse AI response: {}", msg)
+                }
+                AnthropicError::RequestFailed(err) => {
+                    format!("Failed to connect to AI service: {}", err)
+                }
+            },
             _ => format!("{}: {}", error_type, self),
         };
         let response = ApiResponse::<()>::error(&error_message);

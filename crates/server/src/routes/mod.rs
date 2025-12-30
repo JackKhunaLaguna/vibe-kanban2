@@ -5,6 +5,7 @@ use axum::{
 
 use crate::DeploymentImpl;
 
+pub mod anthropic;
 pub mod approvals;
 pub mod config;
 pub mod containers;

@@ -463,17 +463,25 @@ pub async fn generate_task(
         ));
     }
 
-    tracing::debug!(
-        "Generating task for project {} with input: {}",
+    tracing::info!(
+        "Generating task for project {} with input length: {}",
         payload.project_id,
-        payload.user_input
+        payload.user_input.len()
     );
 
-    // TODO: Integrate with AI service for actual task generation
-    // For now, return mock response with placeholder data
+    // Create Anthropic client and generate task
+    let client = super::anthropic::AnthropicClient::from_env()?;
+    let generated = client.generate_task(&payload.user_input).await?;
+
+    tracing::info!(
+        "Generated task: title='{}', prompt_length={}",
+        generated.title,
+        generated.prompt.len()
+    );
+
     let response = GenerateTaskResponse {
-        title: format!("Task: {}", truncate_string(&payload.user_input, 50)),
-        prompt: payload.user_input.clone(),
+        title: generated.title,
+        prompt: generated.prompt,
     };
 
     Ok(ResponseJson(ApiResponse::success(response)))
