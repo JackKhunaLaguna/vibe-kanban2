@@ -230,7 +230,139 @@ export type AssignSharedTaskRequest = { new_assignee_user_id: string | null, };
 
 export type ShareTaskResponse = { shared_task_id: string, };
 
+export type GenerateTaskRequest = { 
+/**
+ * Natural language task description from the user
+ */
+userInput: string, 
+/**
+ * The project identifier for context
+ */
+projectId: string, };
+
+export type GenerateTaskResponse = { 
+/**
+ * Generated task title
+ */
+title: string, 
+/**
+ * Generated prompt/description for the task
+ */
+prompt: string, };
+
 export type CreateAndStartTaskRequest = { task: CreateTask, executor_profile_id: ExecutorProfileId, repos: Array<WorkspaceRepoInput>, };
+
+export type AnalyzeReviewRequest = { 
+/**
+ * List of task IDs to include in the code review
+ */
+taskIds: Array<string>, };
+
+export type AnalyzeReviewResponse = { 
+/**
+ * Whether the review completed successfully
+ */
+success: boolean, 
+/**
+ * The complete review results (present when success is true)
+ */
+review: CompleteReview | null, 
+/**
+ * Error message (present when success is false)
+ */
+error: string | null, };
+
+export type CompleteReview = { 
+/**
+ * Individual reviews for each task
+ */
+taskReviews: Array<TaskReview>, 
+/**
+ * Overall status across all tasks: "passed", "failed", "warnings"
+ */
+overallStatus: string, 
+/**
+ * Aggregate summary across all tasks
+ */
+aggregateSummary: ReviewSummary, 
+/**
+ * Duration of the review in milliseconds
+ */
+durationMs: bigint, 
+/**
+ * Timestamp when the review completed (ISO 8601)
+ */
+completedAt: string, };
+
+export type TaskReview = { 
+/**
+ * The task ID that was reviewed
+ */
+taskId: string, 
+/**
+ * Task title for reference
+ */
+taskTitle: string, 
+/**
+ * Overall status of the review: "passed", "failed", "warnings"
+ */
+status: string, 
+/**
+ * List of findings from the review
+ */
+findings: Array<ReviewFinding>, 
+/**
+ * Summary statistics
+ */
+summary: ReviewSummary, };
+
+export type ReviewFinding = { 
+/**
+ * File path relative to repository root
+ */
+filePath: string, 
+/**
+ * Line number where the finding applies (if applicable)
+ */
+lineNumber: number | null, 
+/**
+ * Severity level: "error", "warning", "info", "suggestion"
+ */
+severity: string, 
+/**
+ * Category of the finding (e.g., "security", "performance", "style", "bug")
+ */
+category: string, 
+/**
+ * Short description of the issue
+ */
+title: string, 
+/**
+ * Detailed explanation of the finding
+ */
+description: string, 
+/**
+ * Suggested fix or improvement (if applicable)
+ */
+suggestion: string | null, };
+
+export type ReviewSummary = { 
+/**
+ * Total number of files reviewed
+ */
+filesReviewed: number, 
+/**
+ * Number of error-level findings
+ */
+errorCount: number, 
+/**
+ * Number of warning-level findings
+ */
+warningCount: number, 
+/**
+ * Number of info/suggestion findings
+ */
+infoCount: number, };
 
 export type CreateGitHubPrRequest = { title: string, body: string | null, target_branch: string | null, draft: boolean | null, repo_id: string, auto_generate_description: boolean, };
 

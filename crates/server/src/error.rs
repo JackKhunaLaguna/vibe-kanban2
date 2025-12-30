@@ -80,6 +80,8 @@ pub enum ApiError {
     Forbidden(String),
     #[error(transparent)]
     Anthropic(#[from] AnthropicError),
+    #[error("Review timed out after {timeout_secs}s for {task_count} tasks")]
+    ReviewTimeout { task_count: usize, timeout_secs: u64 },
 }
 
 impl From<&'static str> for ApiError {
@@ -191,6 +193,7 @@ impl IntoResponse for ApiError {
                 ),
                 _ => (StatusCode::BAD_GATEWAY, "AnthropicError"),
             },
+            ApiError::ReviewTimeout { .. } => (StatusCode::GATEWAY_TIMEOUT, "ReviewTimeout"),
         };
 
         let error_message = match &self {
@@ -281,6 +284,12 @@ impl IntoResponse for ApiError {
                     format!("Failed to connect to AI service: {}", err)
                 }
             },
+            ApiError::ReviewTimeout { task_count, timeout_secs } => {
+                format!(
+                    "Code review timed out after {}s while reviewing {} task(s). Please try with fewer tasks or retry later.",
+                    timeout_secs, task_count
+                )
+            }
             _ => format!("{}: {}", error_type, self),
         };
         let response = ApiResponse::<()>::error(&error_message);
