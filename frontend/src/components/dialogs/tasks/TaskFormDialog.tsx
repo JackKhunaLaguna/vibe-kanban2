@@ -336,8 +336,8 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
 
     try {
       const result = await tasksApi.generate({
-        input: aiInput.trim(),
-        project_id: projectId,
+        userInput: aiInput.trim(),
+        projectId: projectId,
       });
       setGeneratedTask(result);
     } catch (error) {

@@ -467,8 +467,8 @@ export const tasksApi = {
   },
 
   generate: async (data: {
-    input: string;
-    project_id: string;
+    userInput: string;
+    projectId: string;
   }): Promise<{ title: string; prompt: string }> => {
     const response = await makeRequest(`/api/tasks/generate`, {
       method: 'POST',
