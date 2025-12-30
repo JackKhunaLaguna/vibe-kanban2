@@ -93,6 +93,15 @@ export {
   type EditBranchNameDialogResult,
 } from './tasks/EditBranchNameDialog';
 export { CreateAttemptDialog } from './tasks/CreateAttemptDialog';
+export {
+  ReviewModal,
+  type ReviewModalProps,
+  type ReviewModalResult,
+  type CompleteReview,
+  type TaskReviewResult,
+  type ReviewIssue,
+  type Fix,
+} from './tasks/ReviewModal';
 
 // Auth dialogs
 export { GhCliSetupDialog } from './auth/GhCliSetupDialog';
