@@ -1,0 +1,16 @@
+{
+  "name": "@vibe-kanban/services",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Node.js services for Vibe Kanban",
+  "main": "dist/services/autoFixService.js",
+  "types": "dist/services/autoFixService.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.27",
+    "typescript": "^5.9.2"
+  }
+}
