@@ -470,6 +470,25 @@
       "description": "You have unsaved changes. Are you sure you want to discard them?",
       "continueEditing": "Continue Editing",
       "discardChanges": "Discard Changes"
+    },
+    "modeToggle": {
+      "standard": "Standard",
+      "aiAssisted": "AI-Assisted"
+    },
+    "aiMode": {
+      "inputLabel": "Describe your task",
+      "inputPlaceholder": "Describe what you want to accomplish. For example: \"Add a dark mode toggle to the settings page\" or \"Fix the login form validation bug\"",
+      "inputHint": "Press Cmd+Enter to generate",
+      "generate": "Generate",
+      "generating": "Generating...",
+      "previewTitle": "Generated Task",
+      "titleLabel": "Title",
+      "promptLabel": "Prompt",
+      "regenerate": "Regenerate",
+      "accept": "Use This",
+      "editHint": "You can edit the generated title and prompt before creating the task",
+      "error": "Failed to generate task. Please try again.",
+      "emptyInput": "Please describe your task first"
     }
   },
   "restoreLogsDialog": {
