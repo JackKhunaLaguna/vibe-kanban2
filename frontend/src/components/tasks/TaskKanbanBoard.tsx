@@ -12,6 +12,7 @@ import type { TaskStatus, TaskWithAttemptStatus } from 'shared/types';
 import { statusBoardColors, statusLabels } from '@/utils/statusLabels';
 import type { SharedTaskRecord } from '@/hooks/useProjectTasks';
 import { SharedTaskCard } from './SharedTaskCard';
+import { Cog } from 'lucide-react';
 
 export type KanbanColumnItem =
   | {
@@ -59,6 +60,11 @@ function TaskKanbanBoard({
               name={statusLabels[statusKey]}
               color={statusBoardColors[statusKey]}
               onAddTask={onCreateTask}
+              icon={
+                statusKey === 'applyingfixes' ? (
+                  <Cog className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                ) : undefined
+              }
             />
             <KanbanCards>
               {items.map((item, index) => {
