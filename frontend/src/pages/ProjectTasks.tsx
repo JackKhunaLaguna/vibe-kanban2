@@ -79,6 +79,7 @@ const TASK_STATUSES = [
   'todo',
   'inprogress',
   'inreview',
+  'applyingfixes',
   'done',
   'cancelled',
 ] as const;
@@ -363,6 +364,7 @@ export function ProjectTasks() {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };
@@ -455,6 +457,7 @@ export function ProjectTasks() {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };
@@ -755,6 +758,14 @@ export function ProjectTasks() {
       const newStatus = over.id as Task['status'];
       const task = tasksById[draggedTaskId];
       if (!task || task.status === newStatus) return;
+
+      // Prevent manual dragging to/from applyingfixes column
+      if (
+        newStatus === 'applyingfixes' ||
+        task.status === 'applyingfixes'
+      ) {
+        return;
+      }
 
       try {
         await tasksApi.update(draggedTaskId, {

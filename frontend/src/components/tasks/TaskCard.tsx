@@ -89,7 +89,10 @@ export function TaskCard({
       onClick={handleClick}
       isOpen={isOpen}
       forwardedRef={localRef}
-      dragDisabled={(!!sharedTask || !!task.shared_task_id) && !isSignedIn}
+      dragDisabled={
+        ((!!sharedTask || !!task.shared_task_id) && !isSignedIn) ||
+        task.status === 'applyingfixes'
+      }
       className={
         sharedTask || task.shared_task_id
           ? 'relative overflow-hidden pl-5 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-card-foreground before:content-[""]'
