@@ -487,15 +487,6 @@ pub async fn generate_task(
     Ok(ResponseJson(ApiResponse::success(response)))
 }
 
-/// Truncates a string to the specified max length, adding ellipsis if truncated
-fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
-}
-
 pub async fn share_task(
     Extension(task): Extension<Task>,
     State(deployment): State<DeploymentImpl>,
