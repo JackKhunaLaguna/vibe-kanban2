@@ -4,7 +4,10 @@ import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import { useDropzone } from 'react-dropzone';
 import { useForm, useStore } from '@tanstack/react-form';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, Sparkles } from 'lucide-react';
+import { tasksApi } from '@/lib/api';
+import { AITaskInput } from './AITaskInput';
+import { TaskPreview } from './TaskPreview';
 import {
   Dialog,
   DialogContent,
@@ -83,6 +86,13 @@ type TaskFormValues = {
   autoStart: boolean;
 };
 
+type CreationMode = 'standard' | 'ai-assisted';
+
+interface GeneratedTask {
+  title: string;
+  prompt: string;
+}
+
 const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   const { mode, projectId } = props;
   const editMode = mode === 'edit';
@@ -101,6 +111,16 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
   );
   const [showDiscardWarning, setShowDiscardWarning] = useState(false);
   const forceCreateOnlyRef = useRef(false);
+
+  // AI-assisted mode state (only available in create/subtask mode)
+  const supportsAiMode = mode === 'create' || mode === 'subtask';
+  const [creationMode, setCreationMode] = useState<CreationMode>('standard');
+  const [aiInput, setAiInput] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedTask, setGeneratedTask] = useState<GeneratedTask | null>(
+    null
+  );
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   const { data: taskImages } = useTaskImages(
     editMode ? props.task.id : undefined
@@ -302,8 +322,56 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
     if (isDirty) return true;
     if (newlyUploadedImageIds.length > 0) return true;
     if (images.length > 0 && !editMode) return true;
+    if (aiInput.trim().length > 0) return true;
+    if (generatedTask !== null) return true;
     return false;
-  }, [isDirty, newlyUploadedImageIds, images, editMode]);
+  }, [isDirty, newlyUploadedImageIds, images, editMode, aiInput, generatedTask]);
+
+  // AI generation handlers
+  const handleGenerate = useCallback(async () => {
+    if (!aiInput.trim()) return;
+
+    setIsGenerating(true);
+    setGenerationError(null);
+
+    try {
+      const result = await tasksApi.generate({
+        userInput: aiInput.trim(),
+        projectId: projectId,
+      });
+      setGeneratedTask(result);
+    } catch (error) {
+      setGenerationError(
+        error instanceof Error ? error.message : t('taskFormDialog.aiMode.error')
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [aiInput, projectId, t]);
+
+  const handleAcceptGenerated = useCallback(() => {
+    if (!generatedTask) return;
+
+    // Apply generated content to the form
+    form.setFieldValue('title', generatedTask.title);
+    form.setFieldValue('description', generatedTask.prompt);
+
+    // Switch to standard mode to show the form with filled values
+    setCreationMode('standard');
+
+    // Reset AI state
+    setGeneratedTask(null);
+    setAiInput('');
+  }, [generatedTask, form]);
+
+  const handleModeChange = useCallback((newMode: CreationMode) => {
+    setCreationMode(newMode);
+    // Reset generation state when switching modes
+    if (newMode === 'standard') {
+      setGeneratedTask(null);
+      setGenerationError(null);
+    }
+  }, []);
 
   // beforeunload listener
   useEffect(() => {
@@ -371,6 +439,11 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
     setImages([]);
     setNewlyUploadedImageIds([]);
     setShowDiscardWarning(false);
+    // Reset AI state
+    setCreationMode('standard');
+    setAiInput('');
+    setGeneratedTask(null);
+    setGenerationError(null);
     modal.remove();
   };
 
@@ -422,89 +495,166 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
             </div>
           )}
 
-          {/* Title */}
-          <div className="flex-none px-4 py-2 border border-1 border-border">
-            <form.Field name="title">
-              {(field) => (
-                <Input
-                  id="task-title"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder={t('taskFormDialog.titlePlaceholder')}
-                  className="text-lg font-semibold placeholder:text-muted-foreground/60 border-none p-0"
-                  disabled={isSubmitting}
-                  autoFocus
-                />
-              )}
-            </form.Field>
-          </div>
+          {/* Mode toggle - only show in create/subtask mode */}
+          {supportsAiMode && (
+            <div className="flex-none flex items-center gap-2 px-1">
+              <div className="inline-flex items-center rounded-md border border-border p-1 bg-muted/50">
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('standard')}
+                  className={cn(
+                    'px-3 py-1.5 text-sm font-medium rounded-sm transition-colors',
+                    creationMode === 'standard'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  disabled={isSubmitting || isGenerating}
+                >
+                  {t('taskFormDialog.modeToggle.standard')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('ai-assisted')}
+                  className={cn(
+                    'px-3 py-1.5 text-sm font-medium rounded-sm transition-colors flex items-center gap-1.5',
+                    creationMode === 'ai-assisted'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  disabled={isSubmitting || isGenerating}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {t('taskFormDialog.modeToggle.aiAssisted')}
+                </button>
+              </div>
+            </div>
+          )}
 
-          <div className="flex-1 p-4 min-h-0 overflow-y-auto overscroll-contain space-y-1 border border-1 border-border">
-            {/* Description */}
-            <form.Field name="description">
-              {(field) => (
-                <WYSIWYGEditor
-                  placeholder={t('taskFormDialog.descriptionPlaceholder')}
-                  value={field.state.value}
-                  onChange={(desc) => field.handleChange(desc)}
+          {/* Conditionally render Standard or AI-Assisted mode */}
+          {creationMode === 'ai-assisted' && supportsAiMode ? (
+            <div className="flex-1 p-4 min-h-0 overflow-y-auto overscroll-contain space-y-4 border border-1 border-border">
+              {!generatedTask ? (
+                <>
+                  <AITaskInput
+                    value={aiInput}
+                    onChange={setAiInput}
+                    onGenerate={handleGenerate}
+                    isGenerating={isGenerating}
+                    disabled={isSubmitting}
+                  />
+                  {generationError && (
+                    <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                      {generationError}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <TaskPreview
+                  generatedTask={generatedTask}
+                  onTitleChange={(title) =>
+                    setGeneratedTask((prev) =>
+                      prev ? { ...prev, title } : null
+                    )
+                  }
+                  onPromptChange={(prompt) =>
+                    setGeneratedTask((prev) =>
+                      prev ? { ...prev, prompt } : null
+                    )
+                  }
+                  onRegenerate={handleGenerate}
+                  onAccept={handleAcceptGenerated}
+                  isRegenerating={isGenerating}
                   disabled={isSubmitting}
-                  projectId={projectId}
-                  onPasteFiles={onDrop}
-                  className="border-none shadow-none px-0 text-md font-normal"
-                  onCmdEnter={primaryAction}
-                  onShiftCmdEnter={handleSubmitCreateOnly}
-                  taskId={editMode ? props.task.id : undefined}
-                  localImages={localImages}
                 />
               )}
-            </form.Field>
-            {/* Edit mode status */}
-            {editMode && (
-              <form.Field name="status">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="task-status"
-                      className="text-sm font-medium"
-                    >
-                      {t('taskFormDialog.statusLabel')}
-                    </Label>
-                    <Select
+            </div>
+          ) : (
+            <>
+              {/* Title */}
+              <div className="flex-none px-4 py-2 border border-1 border-border">
+                <form.Field name="title">
+                  {(field) => (
+                    <Input
+                      id="task-title"
                       value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as TaskStatus)
-                      }
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder={t('taskFormDialog.titlePlaceholder')}
+                      className="text-lg font-semibold placeholder:text-muted-foreground/60 border-none p-0"
                       disabled={isSubmitting}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todo">
-                          {t('taskFormDialog.statusOptions.todo')}
-                        </SelectItem>
-                        <SelectItem value="inprogress">
-                          {t('taskFormDialog.statusOptions.inprogress')}
-                        </SelectItem>
-                        <SelectItem value="inreview">
-                          {t('taskFormDialog.statusOptions.inreview')}
-                        </SelectItem>
-                        <SelectItem value="done">
-                          {t('taskFormDialog.statusOptions.done')}
-                        </SelectItem>
-                        <SelectItem value="cancelled">
-                          {t('taskFormDialog.statusOptions.cancelled')}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </form.Field>
-            )}
-          </div>
+                      autoFocus
+                    />
+                  )}
+                </form.Field>
+              </div>
 
-          {/* Create mode dropdowns */}
-          {!editMode && (
+              <div className="flex-1 p-4 min-h-0 overflow-y-auto overscroll-contain space-y-1 border border-1 border-border">
+                {/* Description */}
+                <form.Field name="description">
+                  {(field) => (
+                    <WYSIWYGEditor
+                      placeholder={t('taskFormDialog.descriptionPlaceholder')}
+                      value={field.state.value}
+                      onChange={(desc) => field.handleChange(desc)}
+                      disabled={isSubmitting}
+                      projectId={projectId}
+                      onPasteFiles={onDrop}
+                      className="border-none shadow-none px-0 text-md font-normal"
+                      onCmdEnter={primaryAction}
+                      onShiftCmdEnter={handleSubmitCreateOnly}
+                      taskId={editMode ? props.task.id : undefined}
+                      localImages={localImages}
+                    />
+                  )}
+                </form.Field>
+                {/* Edit mode status */}
+                {editMode && (
+                  <form.Field name="status">
+                    {(field) => (
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="task-status"
+                          className="text-sm font-medium"
+                        >
+                          {t('taskFormDialog.statusLabel')}
+                        </Label>
+                        <Select
+                          value={field.state.value}
+                          onValueChange={(value) =>
+                            field.handleChange(value as TaskStatus)
+                          }
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todo">
+                              {t('taskFormDialog.statusOptions.todo')}
+                            </SelectItem>
+                            <SelectItem value="inprogress">
+                              {t('taskFormDialog.statusOptions.inprogress')}
+                            </SelectItem>
+                            <SelectItem value="inreview">
+                              {t('taskFormDialog.statusOptions.inreview')}
+                            </SelectItem>
+                            <SelectItem value="done">
+                              {t('taskFormDialog.statusOptions.done')}
+                            </SelectItem>
+                            <SelectItem value="cancelled">
+                              {t('taskFormDialog.statusOptions.cancelled')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </form.Field>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Create mode dropdowns - shown in both standard and AI mode after generation */}
+          {!editMode && creationMode === 'standard' && (
             <form.Field name="autoStart" mode="array">
               {(autoStartField) => {
                 const isSingleRepo = repoBranchConfigs.length === 1;
@@ -612,76 +762,78 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
             </form.Field>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-between gap-3">
-            {/* Attach Image*/}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={dropzoneOpen}
-                className="h-9 w-9 p-0 rounded-none"
-                aria-label={t('taskFormDialog.attachImage')}
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
+          {/* Actions - hide when in AI mode (AI mode has its own action buttons) */}
+          {(creationMode === 'standard' || !supportsAiMode) && (
+            <div className="flex items-center justify-between gap-3">
+              {/* Attach Image*/}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={dropzoneOpen}
+                  className="h-9 w-9 p-0 rounded-none"
+                  aria-label={t('taskFormDialog.attachImage')}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Autostart switch */}
+              <div className="flex items-center gap-3">
+                {!editMode && (
+                  <form.Field name="autoStart">
+                    {(field) => (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="autostart-switch"
+                          checked={field.state.value}
+                          onCheckedChange={(checked) =>
+                            field.handleChange(checked)
+                          }
+                          disabled={isSubmitting}
+                          className="data-[state=checked]:bg-gray-900 dark:data-[state=checked]:bg-gray-100"
+                          aria-label={t('taskFormDialog.startLabel')}
+                        />
+                        <Label
+                          htmlFor="autostart-switch"
+                          className="text-sm cursor-pointer"
+                        >
+                          {t('taskFormDialog.startLabel')}
+                        </Label>
+                      </div>
+                    )}
+                  </form.Field>
+                )}
+
+                {/* Create/Start/Update button*/}
+                <form.Subscribe
+                  selector={(state) => ({
+                    canSubmit: state.canSubmit,
+                    isSubmitting: state.isSubmitting,
+                    values: state.values,
+                  })}
+                >
+                  {({ canSubmit, isSubmitting, values }) => {
+                    const buttonText = editMode
+                      ? isSubmitting
+                        ? t('taskFormDialog.updating')
+                        : t('taskFormDialog.updateTask')
+                      : isSubmitting
+                        ? values.autoStart
+                          ? t('taskFormDialog.starting')
+                          : t('taskFormDialog.creating')
+                        : t('taskFormDialog.create');
+
+                    return (
+                      <Button onClick={form.handleSubmit} disabled={!canSubmit}>
+                        {buttonText}
+                      </Button>
+                    );
+                  }}
+                </form.Subscribe>
+              </div>
             </div>
-
-            {/* Autostart switch */}
-            <div className="flex items-center gap-3">
-              {!editMode && (
-                <form.Field name="autoStart">
-                  {(field) => (
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="autostart-switch"
-                        checked={field.state.value}
-                        onCheckedChange={(checked) =>
-                          field.handleChange(checked)
-                        }
-                        disabled={isSubmitting}
-                        className="data-[state=checked]:bg-gray-900 dark:data-[state=checked]:bg-gray-100"
-                        aria-label={t('taskFormDialog.startLabel')}
-                      />
-                      <Label
-                        htmlFor="autostart-switch"
-                        className="text-sm cursor-pointer"
-                      >
-                        {t('taskFormDialog.startLabel')}
-                      </Label>
-                    </div>
-                  )}
-                </form.Field>
-              )}
-
-              {/* Create/Start/Update button*/}
-              <form.Subscribe
-                selector={(state) => ({
-                  canSubmit: state.canSubmit,
-                  isSubmitting: state.isSubmitting,
-                  values: state.values,
-                })}
-              >
-                {({ canSubmit, isSubmitting, values }) => {
-                  const buttonText = editMode
-                    ? isSubmitting
-                      ? t('taskFormDialog.updating')
-                      : t('taskFormDialog.updateTask')
-                    : isSubmitting
-                      ? values.autoStart
-                        ? t('taskFormDialog.starting')
-                        : t('taskFormDialog.creating')
-                      : t('taskFormDialog.create');
-
-                  return (
-                    <Button onClick={form.handleSubmit} disabled={!canSubmit}>
-                      {buttonText}
-                    </Button>
-                  );
-                }}
-              </form.Subscribe>
-            </div>
-          </div>
+          )}
         </div>
       </Dialog>
       {showDiscardWarning && (

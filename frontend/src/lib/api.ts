@@ -465,6 +465,17 @@ export const tasksApi = {
     });
     return handleApiResponse<Task | null>(response);
   },
+
+  generate: async (data: {
+    userInput: string;
+    projectId: string;
+  }): Promise<{ title: string; prompt: string }> => {
+    const response = await makeRequest(`/api/tasks/generate`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<{ title: string; prompt: string }>(response);
+  },
 };
 
 // Sessions API
