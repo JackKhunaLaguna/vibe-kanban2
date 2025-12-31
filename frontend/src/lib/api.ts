@@ -89,6 +89,9 @@ import {
   AbortConflictsRequest,
   Session,
   Workspace,
+  FeatureBreakdownResponse,
+  ConversationMessageRequest,
+  BulkCreateTasksResponse,
 } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
@@ -475,6 +478,29 @@ export const tasksApi = {
       body: JSON.stringify(data),
     });
     return handleApiResponse<{ title: string; prompt: string }>(response);
+  },
+
+  breakdown: async (data: {
+    featureDescription: string;
+    projectId: string;
+    conversationHistory?: ConversationMessageRequest[];
+  }): Promise<FeatureBreakdownResponse> => {
+    const response = await makeRequest(`/api/tasks/breakdown`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<FeatureBreakdownResponse>(response);
+  },
+
+  bulkCreate: async (data: {
+    projectId: string;
+    tasks: Array<{ title: string; description: string }>;
+  }): Promise<BulkCreateTasksResponse> => {
+    const response = await makeRequest(`/api/tasks/bulk`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<BulkCreateTasksResponse>(response);
   },
 };
 

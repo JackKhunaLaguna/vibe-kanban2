@@ -230,6 +230,100 @@ export type AssignSharedTaskRequest = { new_assignee_user_id: string | null, };
 
 export type ShareTaskResponse = { shared_task_id: string, };
 
+export type GenerateTaskRequest = { 
+/**
+ * Natural language task description from the user
+ */
+userInput: string, 
+/**
+ * The project identifier for context
+ */
+projectId: string, };
+
+export type GenerateTaskResponse = { 
+/**
+ * Generated task title
+ */
+title: string, 
+/**
+ * Generated prompt/description for the task
+ */
+prompt: string, };
+
+export type BreakdownTaskResponse = { 
+/**
+ * Task title
+ */
+title: string, 
+/**
+ * Task description
+ */
+description: string, 
+/**
+ * List of task titles this task depends on
+ */
+dependencies: Array<string>, };
+
+export type FeatureBreakdownResponse = { 
+/**
+ * List of tasks in the breakdown
+ */
+tasks: Array<BreakdownTaskResponse>, };
+
+export type BreakdownFeatureRequest = { 
+/**
+ * Natural language feature description from the user
+ */
+featureDescription: string, 
+/**
+ * The project identifier for context
+ */
+projectId: string, 
+/**
+ * Optional conversation history for refinement
+ */
+conversationHistory: Array<ConversationMessageRequest>, };
+
+export type ConversationMessageRequest = { 
+/**
+ * Role: "user" or "assistant"
+ */
+role: string, 
+/**
+ * Message content
+ */
+content: string, };
+
+export type BulkCreateTasksRequest = { 
+/**
+ * The project to create tasks in
+ */
+projectId: string, 
+/**
+ * List of tasks to create
+ */
+tasks: Array<BulkCreateTaskInput>, };
+
+export type BulkCreateTaskInput = { 
+/**
+ * Task title
+ */
+title: string, 
+/**
+ * Task description
+ */
+description: string, };
+
+export type BulkCreateTasksResponse = { 
+/**
+ * List of created tasks
+ */
+created_tasks: Array<Task>, 
+/**
+ * Number of tasks successfully created
+ */
+created_count: number, };
+
 export type CreateAndStartTaskRequest = { task: CreateTask, executor_profile_id: ExecutorProfileId, repos: Array<WorkspaceRepoInput>, };
 
 export type CreateGitHubPrRequest = { title: string, body: string | null, target_branch: string | null, draft: boolean | null, repo_id: string, auto_generate_description: boolean, };

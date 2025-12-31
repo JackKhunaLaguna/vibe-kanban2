@@ -452,6 +452,46 @@ pub struct GenerateTaskResponse {
     pub prompt: String,
 }
 
+/// A single task in a feature breakdown
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct BreakdownTaskResponse {
+    /// Task title
+    pub title: String,
+    /// Task description
+    pub description: String,
+    /// List of task titles this task depends on
+    pub dependencies: Vec<String>,
+}
+
+/// Response for the feature breakdown endpoint
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct FeatureBreakdownResponse {
+    /// List of tasks in the breakdown
+    pub tasks: Vec<BreakdownTaskResponse>,
+}
+
+/// Request for breaking down a feature into tasks
+#[derive(Debug, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BreakdownFeatureRequest {
+    /// Natural language feature description from the user
+    pub feature_description: String,
+    /// The project identifier for context
+    pub project_id: Uuid,
+    /// Optional conversation history for refinement
+    #[serde(default)]
+    pub conversation_history: Vec<ConversationMessageRequest>,
+}
+
+/// A message in the conversation history
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ConversationMessageRequest {
+    /// Role: "user" or "assistant"
+    pub role: String,
+    /// Message content
+    pub content: String,
+}
+
 pub async fn generate_task(
     State(_deployment): State<DeploymentImpl>,
     Json(payload): Json<GenerateTaskRequest>,
@@ -485,6 +525,146 @@ pub async fn generate_task(
     };
 
     Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+pub async fn breakdown_feature(
+    State(_deployment): State<DeploymentImpl>,
+    Json(payload): Json<BreakdownFeatureRequest>,
+) -> Result<ResponseJson<ApiResponse<FeatureBreakdownResponse>>, ApiError> {
+    // Validate required fields
+    if payload.feature_description.trim().is_empty() {
+        return Err(ApiError::BadRequest(
+            "featureDescription is required and cannot be empty".to_string(),
+        ));
+    }
+
+    tracing::info!(
+        "Breaking down feature for project {} with input length: {}",
+        payload.project_id,
+        payload.feature_description.len()
+    );
+
+    // Create Anthropic client and generate breakdown
+    let client = super::anthropic::AnthropicClient::from_env()?;
+
+    // Convert conversation history to the format expected by the Anthropic client
+    let history: Vec<super::anthropic::ConversationMessage> = payload
+        .conversation_history
+        .iter()
+        .map(|msg| super::anthropic::ConversationMessage {
+            role: msg.role.clone(),
+            content: msg.content.clone(),
+        })
+        .collect();
+
+    let history_ref = if history.is_empty() {
+        None
+    } else {
+        Some(history.as_slice())
+    };
+
+    let breakdown = client
+        .breakdown_feature(&payload.feature_description, history_ref)
+        .await?;
+
+    tracing::info!(
+        "Generated breakdown with {} tasks",
+        breakdown.tasks.len()
+    );
+
+    let response = FeatureBreakdownResponse {
+        tasks: breakdown
+            .tasks
+            .into_iter()
+            .map(|t| BreakdownTaskResponse {
+                title: t.title,
+                description: t.description,
+                dependencies: t.dependencies,
+            })
+            .collect(),
+    };
+
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+/// Request for bulk task creation
+#[derive(Debug, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkCreateTasksRequest {
+    /// The project to create tasks in
+    pub project_id: Uuid,
+    /// List of tasks to create
+    pub tasks: Vec<BulkCreateTaskInput>,
+}
+
+/// Input for a single task in bulk creation
+#[derive(Debug, Deserialize, TS)]
+pub struct BulkCreateTaskInput {
+    /// Task title
+    pub title: String,
+    /// Task description
+    pub description: String,
+}
+
+/// Response for bulk task creation
+#[derive(Debug, Serialize, TS)]
+pub struct BulkCreateTasksResponse {
+    /// List of created tasks
+    pub created_tasks: Vec<Task>,
+    /// Number of tasks successfully created
+    pub created_count: usize,
+}
+
+pub async fn bulk_create_tasks(
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<BulkCreateTasksRequest>,
+) -> Result<ResponseJson<ApiResponse<BulkCreateTasksResponse>>, ApiError> {
+    if payload.tasks.is_empty() {
+        return Err(ApiError::BadRequest(
+            "At least one task is required".to_string(),
+        ));
+    }
+
+    tracing::info!(
+        "Bulk creating {} tasks in project {}",
+        payload.tasks.len(),
+        payload.project_id
+    );
+
+    let mut created_tasks = Vec::new();
+
+    for task_input in payload.tasks {
+        let id = Uuid::new_v4();
+        let create_task = CreateTask {
+            project_id: payload.project_id,
+            title: task_input.title,
+            description: Some(task_input.description),
+            status: None, // Will use default 'todo' status
+            parent_workspace_id: None,
+            image_ids: None,
+            shared_task_id: None,
+        };
+
+        let task = Task::create(&deployment.db().pool, &create_task, id).await?;
+        created_tasks.push(task);
+    }
+
+    let created_count = created_tasks.len();
+
+    deployment
+        .track_if_analytics_allowed(
+            "bulk_tasks_created",
+            serde_json::json!({
+                "project_id": payload.project_id,
+                "task_count": created_count,
+            }),
+        )
+        .await;
+
+    Ok(ResponseJson(ApiResponse::success(BulkCreateTasksResponse {
+        created_tasks,
+        created_count,
+    })))
 }
 
 /// Truncates a string to the specified max length, adding ellipsis if truncated
@@ -541,7 +721,10 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .nest("/{task_id}", task_id_router);
 
     // Top-level tasks routes (mounted at /api/tasks)
-    let top_level_tasks = Router::new().route("/generate", post(generate_task));
+    let top_level_tasks = Router::new()
+        .route("/generate", post(generate_task))
+        .route("/breakdown", post(breakdown_feature))
+        .route("/bulk", post(bulk_create_tasks));
 
     Router::new()
         // mount under /projects/:project_id/tasks (nested via projects router)

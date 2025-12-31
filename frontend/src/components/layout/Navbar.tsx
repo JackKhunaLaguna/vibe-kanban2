@@ -19,6 +19,7 @@ import {
   Plus,
   LogOut,
   LogIn,
+  Sparkles,
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { SearchBar } from '@/components/SearchBar';
@@ -40,6 +41,7 @@ import {
 import { OAuthDialog } from '@/components/dialogs/global/OAuthDialog';
 import { useUserSystem } from '@/components/ConfigProvider';
 import { oauthApi } from '@/lib/api';
+import { FeatureCreatorModal } from '@/components/feature-creator';
 
 const INTERNAL_NAV = [{ label: 'Projects', icon: FolderOpen, to: '/projects' }];
 
@@ -112,6 +114,12 @@ export function Navbar() {
   const handleCreateTask = () => {
     if (projectId) {
       openTaskForm({ mode: 'create', projectId });
+    }
+  };
+
+  const handleCreateFeature = () => {
+    if (projectId) {
+      FeatureCreatorModal.show({ projectId });
     }
   };
 
@@ -219,15 +227,42 @@ export function Navbar() {
                       className="h-9 w-9"
                     />
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9"
-                    onClick={handleCreateTask}
-                    aria-label="Create new task"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={handleCreateFeature}
+                          aria-label="Create feature"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        Create Feature
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={handleCreateTask}
+                          aria-label="Create new task"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        Create Task
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
                 <NavDivider />
               </>
