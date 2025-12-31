@@ -533,5 +533,24 @@
     "buttons": {
       "retry": "Retry"
     }
+  },
+  "featureCreator": {
+    "creating": {
+      "title": "Creating Tasks",
+      "description": "Creating tasks from your feature breakdown...",
+      "statusCreating": "Creating task {{current}} of {{total}}...",
+      "statusComplete": "Task creation complete",
+      "tasksCreated": "tasks created",
+      "successMessage": "Successfully created {{count}} tasks!",
+      "successMessage_one": "Successfully created 1 task!",
+      "successMessage_other": "Successfully created {{count}} tasks!",
+      "partialSuccessMessage": "Created {{success}} of {{total}} tasks, {{failed}} failed",
+      "allFailedMessage": "All tasks failed to create. Please try again.",
+      "genericError": "Failed to create task",
+      "viewTasks": "View Tasks",
+      "close": "Close",
+      "retryFailed": "Retry Failed",
+      "creatingTasks": "Creating Tasks..."
+    }
   }
 }
