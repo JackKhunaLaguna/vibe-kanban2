@@ -121,6 +121,7 @@ export const useProjectTasks = (projectId: string): UseProjectTasksResult => {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };
@@ -151,6 +152,7 @@ export const useProjectTasks = (projectId: string): UseProjectTasksResult => {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };

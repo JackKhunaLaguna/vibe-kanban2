@@ -42,7 +42,7 @@ export type CreateTag = { tag_name: string, content: string, };
 
 export type UpdateTag = { tag_name: string | null, content: string | null, };
 
-export type TaskStatus = "todo" | "inprogress" | "inreview" | "done" | "cancelled";
+export type TaskStatus = "todo" | "inprogress" | "inreview" | "applyingfixes" | "done" | "cancelled";
 
 export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, shared_task_id: string | null, created_at: string, updated_at: string, };
 

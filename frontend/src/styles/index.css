@@ -31,6 +31,8 @@
     --_success-foreground: 142.1 76.2% 20%;
     --_warning: 32.2 95% 44.1%;
     --_warning-foreground: 26 83.3% 14.1%;
+    --_amber: 45 93% 47%;
+    --_amber-foreground: 26 83.3% 14.1%;
     --_info: 217.2 91.2% 59.8%;
     --_info-foreground: 222.2 84% 4.9%;
     --_neutral: 210 40% 96%;
@@ -78,6 +80,8 @@
     --_success-foreground: 138.5 76.5% 96.7%;
     --_warning: 32.2 95% 44.1%;
     --_warning-foreground: 26 83.3% 14.1%;
+    --_amber: 45 93% 47%;
+    --_amber-foreground: 26 83.3% 14.1%;
     --_info: 217.2 91.2% 59.8%;
     --_info-foreground: 222.2 84% 4.9%;
     --_neutral: 217.2 32.6% 17.5%;
@@ -158,6 +162,8 @@
       --vscode-descriptionForeground,
       var(--_warning-foreground)
     );
+    --amber: var(--_amber);
+    --amber-foreground: var(--_amber-foreground);
     --info: var(--vscode-focusBorder, var(--_info));
     --info-foreground: var(--vscode-editor-foreground, var(--_info-foreground));
     --neutral: var(--vscode-input-background, var(--_neutral));

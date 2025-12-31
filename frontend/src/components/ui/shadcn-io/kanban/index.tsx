@@ -153,6 +153,7 @@ export type KanbanHeaderProps =
       color: Status['color'];
       className?: string;
       onAddTask?: () => void;
+      icon?: ReactNode;
     };
 
 export const KanbanHeader = (props: KanbanHeaderProps) => {
@@ -180,6 +181,7 @@ export const KanbanHeader = (props: KanbanHeaderProps) => {
         />
 
         <p className="m-0 text-sm">{props.name}</p>
+        {props.icon}
       </span>
       <TooltipProvider>
         <Tooltip>
