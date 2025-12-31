@@ -93,6 +93,22 @@ import {
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
 
+// AI Task Generation Types
+export interface GenerateTaskRequest {
+  user_input: string;
+  project_id: string;
+}
+
+export interface GeneratedTask {
+  title: string;
+  description: string;
+  suggested_tags?: string[];
+}
+
+export interface GenerateTaskResponse {
+  task: GeneratedTask;
+}
+
 export class ApiError<E = unknown> extends Error {
   public status?: number;
   public error_data?: E;
@@ -477,6 +493,177 @@ export const tasksApi = {
     return handleApiResponse<{ title: string; prompt: string }>(response);
   },
 };
+
+// AI Error types
+export class AITaskGenerationError extends Error {
+  public code: 'NETWORK_ERROR' | 'API_ERROR' | 'TIMEOUT' | 'PARSE_ERROR';
+  public status?: number;
+  public originalError?: Error;
+
+  constructor(
+    message: string,
+    code: 'NETWORK_ERROR' | 'API_ERROR' | 'TIMEOUT' | 'PARSE_ERROR',
+    status?: number,
+    originalError?: Error
+  ) {
+    super(message);
+    this.name = 'AITaskGenerationError';
+    this.code = code;
+    this.status = status;
+    this.originalError = originalError;
+  }
+}
+
+// AI Task Generation API
+const DEFAULT_AI_TIMEOUT = 30000; // 30 seconds default timeout for AI operations
+
+export const aiTasksApi = {
+  /**
+   * Generate a task using AI based on user input.
+   * @param userInput - The user's description of what they want to accomplish
+   * @param projectId - The project ID to associate the task with
+   * @param options - Optional configuration including timeout
+   * @returns The generated task with title, description, and suggested tags
+   * @throws AITaskGenerationError for network, API, timeout, or parsing errors
+   */
+  generateAITask: async (
+    userInput: string,
+    projectId: string,
+    options?: { timeout?: number; signal?: AbortSignal }
+  ): Promise<GeneratedTask> => {
+    const timeout = options?.timeout ?? DEFAULT_AI_TIMEOUT;
+
+    // Create an AbortController for timeout handling
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeout);
+
+    // Combine user-provided signal with timeout signal
+    const signal = options?.signal
+      ? combineAbortSignals(options.signal, timeoutController.signal)
+      : timeoutController.signal;
+
+    try {
+      const requestBody: GenerateTaskRequest = {
+        user_input: userInput,
+        project_id: projectId,
+      };
+
+      const response = await makeRequest('/api/ai/tasks/generate', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorMessage = `AI task generation failed with status ${response.status}`;
+
+        try {
+          const errorData = await response.json();
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+
+        throw new AITaskGenerationError(
+          errorMessage,
+          'API_ERROR',
+          response.status
+        );
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new AITaskGenerationError(
+          result.message || 'AI task generation failed',
+          'API_ERROR'
+        );
+      }
+
+      // Validate the response structure
+      const data = result.data as GenerateTaskResponse;
+      if (!data?.task?.title || !data?.task?.description) {
+        throw new AITaskGenerationError(
+          'Invalid response format from AI task generation',
+          'PARSE_ERROR'
+        );
+      }
+
+      return data.task;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Re-throw if already an AITaskGenerationError
+      if (error instanceof AITaskGenerationError) {
+        throw error;
+      }
+
+      // Handle abort/timeout errors
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        // Check if it was our timeout or user cancellation
+        if (timeoutController.signal.aborted) {
+          throw new AITaskGenerationError(
+            `AI task generation timed out after ${timeout}ms`,
+            'TIMEOUT',
+            undefined,
+            error
+          );
+        }
+        // User cancelled
+        throw new AITaskGenerationError(
+          'AI task generation was cancelled',
+          'NETWORK_ERROR',
+          undefined,
+          error
+        );
+      }
+
+      // Handle network errors
+      if (error instanceof TypeError) {
+        throw new AITaskGenerationError(
+          'Network error: Unable to reach the server',
+          'NETWORK_ERROR',
+          undefined,
+          error
+        );
+      }
+
+      // Handle other errors
+      throw new AITaskGenerationError(
+        error instanceof Error ? error.message : 'Unknown error occurred',
+        'NETWORK_ERROR',
+        undefined,
+        error instanceof Error ? error : undefined
+      );
+    }
+  },
+};
+
+/**
+ * Combines multiple AbortSignals into a single signal that aborts when any input signal aborts.
+ */
+function combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return controller.signal;
+    }
+
+    signal.addEventListener(
+      'abort',
+      () => controller.abort(signal.reason),
+      { once: true }
+    );
+  }
+
+  return controller.signal;
+}
 
 // Sessions API
 export const sessionsApi = {
