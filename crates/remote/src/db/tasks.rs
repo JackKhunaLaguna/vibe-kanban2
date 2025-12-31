@@ -21,6 +21,7 @@ pub enum TaskStatus {
     Todo,
     InProgress,
     InReview,
+    ApplyingFixes,
     Done,
     Cancelled,
 }

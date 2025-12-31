@@ -70,6 +70,10 @@ import {
 } from '@/components/ui/breadcrumb';
 import { AttemptHeaderActions } from '@/components/panels/AttemptHeaderActions';
 import { TaskPanelHeaderActions } from '@/components/panels/TaskPanelHeaderActions';
+import { ReviewAllButton } from '@/components/ReviewAllButton';
+import { ReviewModal, type ReviewResults } from '@/components/ReviewModal';
+import { createReviewTask } from '@/services/reviewTaskCreator';
+import { createFixApplicationTask } from '@/services/fixApplicationTaskCreator';
 
 import type { TaskWithAttemptStatus, TaskStatus } from 'shared/types';
 
@@ -79,6 +83,7 @@ const TASK_STATUSES = [
   'todo',
   'inprogress',
   'inreview',
+  'applyingfixes',
   'done',
   'cancelled',
 ] as const;
@@ -144,6 +149,10 @@ export function ProjectTasks() {
     string | null
   >(null);
   const { userId } = useAuth();
+
+  // Review modal state
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
 
   const {
     projectId,
@@ -363,6 +372,7 @@ export function ProjectTasks() {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };
@@ -455,6 +465,7 @@ export function ProjectTasks() {
       todo: [],
       inprogress: [],
       inreview: [],
+      applyingfixes: [],
       done: [],
       cancelled: [],
     };
@@ -482,6 +493,119 @@ export function ProjectTasks() {
         items.some((item) => item.type === 'shared')
       ),
     [kanbanColumns]
+  );
+
+  // Get tasks in the "In Review" column for review functionality
+  const tasksInReview = useMemo(
+    () => visibleTasksByStatus.inreview || [],
+    [visibleTasksByStatus]
+  );
+
+  // Review handlers
+  const handleOpenReviewModal = useCallback(() => {
+    if (tasksInReview.length > 0) {
+      setIsReviewModalOpen(true);
+    }
+  }, [tasksInReview.length]);
+
+  const handleCloseReviewModal = useCallback(() => {
+    setIsReviewModalOpen(false);
+  }, []);
+
+  const handleStartReview = useCallback(
+    async (taskIds: string[]): Promise<ReviewResults> => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+
+      setIsReviewing(true);
+      try {
+        // Get the repos from the first task's attempt if available
+        // For now, use a default configuration
+        const reviewResults = await createReviewTask(
+          taskIds,
+          'Review the code changes for conflicts, code quality issues, and potential bugs.',
+          {
+            projectId,
+            repos: [], // Will be populated from task attempts
+          }
+        );
+
+        // Map service types to modal types
+        return {
+          tasksAnalyzed: reviewResults.summary.totalTasks,
+          issuesFound: reviewResults.summary.issuesFound,
+          issues: reviewResults.issues.map((issue) => ({
+            id: issue.id,
+            severity: issue.severity,
+            description: issue.description,
+            affectedTasks: [issue.taskId],
+            affectedFiles: issue.filePath ? [issue.filePath] : [],
+            proposedFix: {
+              description: issue.suggestion || 'No fix suggested',
+              codeDiff: issue.codeSnippet || '',
+            },
+          })),
+        };
+      } finally {
+        setIsReviewing(false);
+      }
+    },
+    [projectId]
+  );
+
+  const handleAcceptFixes = useCallback(
+    async (results: ReviewResults): Promise<void> => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+
+      // Map severity from ReviewModal to fixApplicationTaskCreator format
+      const mapSeverity = (severity: 'critical' | 'major' | 'minor') => {
+        switch (severity) {
+          case 'critical':
+            return 'critical' as const;
+          case 'major':
+            return 'high' as const;
+          case 'minor':
+            return 'low' as const;
+        }
+      };
+
+      // Convert modal issues to fix application format
+      const approvedFixes = results.issues.map((issue) => ({
+        id: issue.id,
+        title: issue.description,
+        description: issue.proposedFix.description,
+        filePath: issue.affectedFiles[0] || '',
+        lineNumbers: { start: 1, end: 1 },
+        severity: mapSeverity(issue.severity),
+        proposedFix: issue.proposedFix.codeDiff,
+        targetBranch: 'main',
+        context: JSON.stringify({ taskIds: issue.affectedTasks }),
+      }));
+
+      await createFixApplicationTask({
+        projectId,
+        approvedFixes,
+        repos: [],
+      });
+
+      // Update task statuses to "applyingfixes"
+      for (const taskId of results.issues.flatMap((i) => i.affectedTasks)) {
+        const task = tasksById[taskId];
+        if (task) {
+          await tasksApi.update(taskId, {
+            title: task.title,
+            description: task.description,
+            status: 'applyingfixes',
+            parent_workspace_id: task.parent_workspace_id,
+            image_ids: null,
+          });
+        }
+      }
+    },
+    [projectId, tasksById]
   );
 
   useKeyNavUp(
@@ -756,6 +880,14 @@ export function ProjectTasks() {
       const task = tasksById[draggedTaskId];
       if (!task || task.status === newStatus) return;
 
+      // Prevent manual dragging to/from applyingfixes column
+      if (
+        newStatus === 'applyingfixes' ||
+        task.status === 'applyingfixes'
+      ) {
+        return;
+      }
+
       try {
         await tasksApi.update(draggedTaskId, {
           title: task.title,
@@ -849,17 +981,26 @@ export function ProjectTasks() {
         </Card>
       </div>
     ) : (
-      <div className="w-full h-full overflow-x-auto overflow-y-auto overscroll-x-contain">
-        <TaskKanbanBoard
-          columns={kanbanColumns}
-          onDragEnd={handleDragEnd}
-          onViewTaskDetails={handleViewTaskDetails}
-          onViewSharedTask={handleViewSharedTask}
-          selectedTaskId={selectedTask?.id}
-          selectedSharedTaskId={selectedSharedTaskId}
-          onCreateTask={handleCreateNewTask}
-          projectId={projectId!}
-        />
+      <div className="w-full h-full flex flex-col">
+        <div className="flex items-center justify-end px-4 py-2 border-b">
+          <ReviewAllButton
+            taskCount={tasksInReview.length}
+            onReviewClick={handleOpenReviewModal}
+            isReviewing={isReviewing}
+          />
+        </div>
+        <div className="flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
+          <TaskKanbanBoard
+            columns={kanbanColumns}
+            onDragEnd={handleDragEnd}
+            onViewTaskDetails={handleViewTaskDetails}
+            onViewSharedTask={handleViewSharedTask}
+            selectedTaskId={selectedTask?.id}
+            selectedSharedTaskId={selectedSharedTaskId}
+            onCreateTask={handleCreateNewTask}
+            projectId={projectId!}
+          />
+        </div>
       </div>
     );
 
@@ -1042,6 +1183,14 @@ export function ProjectTasks() {
       )}
 
       <div className="flex-1 min-h-0">{attemptArea}</div>
+
+      <ReviewModal
+        isOpen={isReviewModalOpen}
+        tasks={tasksInReview}
+        onClose={handleCloseReviewModal}
+        onStartReview={handleStartReview}
+        onAcceptFixes={handleAcceptFixes}
+      />
     </div>
   );
 }
