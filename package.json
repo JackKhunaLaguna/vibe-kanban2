@@ -33,6 +33,7 @@
     "remote:prepare-db:check": "cd crates/remote && bash scripts/prepare-db.sh --check"
   },
   "devDependencies": {
+    "@types/node": "^25.0.3",
     "concurrently": "^8.2.2",
     "vite": "^6.3.5"
   },
